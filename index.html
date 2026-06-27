@@ -1,9 +1,362 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Мой Пингвин</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #ebf3f5;
+            --text-color: #2c3e50;
+            --accent-color: #3498db;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 90vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 24px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 340px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-top: 0;
+            margin-bottom: 5px;
+        }
+
+        .username {
+            color: var(--accent-color);
+        }
+
+        /* Анимация и отображение пингвина */
+        .penguin-container {
+            font-size: 90px;
+            margin: 20px 0;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+        
+        .bounce {
+            animation: bounce 0.5s ease;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        /* Статусы (Полоски) */
+        .stat-box {
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .bar-bg {
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 12px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            width: 100%;
+            transition: width 0.3s ease, background-color 0.3s;
+        }
+
+        /* Кнопки действий */
+        .buttons-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        button {
+            background-color: #f0f4f8;
+            border: none;
+            padding: 12px;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        button:active {
+            transform: scale(0.95);
+            background-color: #e2e8f0;
+        }
+
+        button.sleep-btn.active {
+            background-color: #2c3e50;
+            color: white;
+        }
+
+        .btn-icon {
+            font-size: 20px;
+        }
+
+        .dead-screen {
+            display: none;
+        }
+        
+        .dead button {
+            grid-column: span 2;
+            background-color: #e74c3c;
+            color: white;
+        }
+    </style>
 </head>
 <body>
-    <h1>Тут будет расти пингвин! 🐧</h1>
+
+    <div class="card">
+        <h1>Пингвин <span class="username" id="player-name">Игрок</span></h1>
+        
+        <div class="penguin-container" id="penguin">🐧</div>
+
+        <div class="stat-box">
+            <div class="stat-label"><span>🍖 Сытость</span><span id="txt-hunger">100%</span></div>
+            <div class="bar-bg"><div id="bar-hunger" class="bar-fill" style="background-color: #2ecc71;"></div></div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label"><span>🥳 Радость</span><span id="txt-joy">100%</span></div>
+            <div class="bar-bg"><div id="bar-joy" class="bar-fill" style="background-color: #9b59b6;"></div></div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label"><span>⚡ Энергия</span><span id="txt-energy">100%</span></div>
+            <div class="bar-bg"><div id="bar-energy" class="bar-fill" style="background-color: #f1c40f;"></div></div>
+        </div>
+
+        <div class="buttons-grid" id="controls">
+            <button onclick="feedPenguin()">
+                <span class="btn-icon">🐟</span> Покормить
+            </button>
+            <button onclick="playWithPenguin()">
+                <span class="btn-icon">⚽</span> Поиграть
+            </button>
+            <button id="sleep-button" class="sleep-btn" onclick="toggleSleep()">
+                <span class="btn-icon" id="sleep-icon">😴</span> <span id="sleep-text">Уложить спать</span>
+            </button>
+            <button onclick="petPenguin()">
+                <span class="btn-icon">❤️</span> Погладить
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp API
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Раскрываем на весь экран телефона
+
+        // Получаем имя пользователя из Telegram
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            document.getElementById('player-name').innerText = tg.initDataUnsafe.user.first_name;
+        }
+
+        // Параметры пингвина по умолчанию
+        let stats = {
+            hunger: 100,
+            joy: 100,
+            energy: 100,
+            isSleeping: false,
+            isDead: false
+        };
+
+        // Загрузка сохранения, если оно есть
+        if (localStorage.getItem('penguin_stats')) {
+            stats = JSON.parse(localStorage.getItem('penguin_stats'));
+        }
+
+        // Элементы страницы
+        const penguinEl = document.getElementById('penguin');
+        const sleepBtn = document.getElementById('sleep-button');
+
+        // Функция сохранения данных
+        function saveGame() {
+            localStorage.setItem('penguin_stats', JSON.stringify(stats));
+        }
+
+        // Анимация прыжка при действии
+        function triggerBounce() {
+            penguinEl.classList.remove('bounce');
+            void penguinEl.offsetWidth; // Магия для перезапуска CSS анимации
+            penguinEl.classList.add('bounce');
+        }
+
+        // Изменение параметров (с ограничением от 0 до 100)
+        function updateStat(name, val) {
+            stats[name] = Math.max(0, Math.min(100, stats[name] + val));
+            if (stats.hunger <= 0) {
+                stats.isDead = true;
+            }
+            saveGame();
+            render();
+        }
+
+        // Действие: Кормление
+        function feedPenguin() {
+            if (stats.isDead || stats.isSleeping) return;
+            triggerBounce();
+            updateStat('hunger', 15);
+            updateStat('energy', -5);
+        }
+
+        // Действие: Игра
+        function playWithPenguin() {
+            if (stats.isDead || stats.isSleeping) return;
+            if (stats.energy < 15) {
+                tg.HapticFeedback.notificationOccurred('error'); // Вибрация-предупреждение
+                alert('Пингвин слишком устал для игр!');
+                return;
+            }
+            triggerBounce();
+            updateStat('joy', 20);
+            updateStat('energy', -15);
+            updateStat('hunger', -10);
+        }
+
+        // Действие: Сон (включение / выключение)
+        function toggleSleep() {
+            if (stats.isDead) return;
+            stats.isSleeping = !stats.isSleeping;
+            if (stats.isSleeping) {
+                sleepBtn.classList.add('active');
+                document.getElementById('sleep-text').innerText = "Разбудить";
+                document.getElementById('sleep-icon').innerText = "☀️";
+            } else {
+                sleepBtn.classList.remove('active');
+                document.getElementById('sleep-text').innerText = "Уложить спать";
+                document.getElementById('sleep-icon').innerText = "😴";
+                triggerBounce();
+            }
+            saveGame();
+            render();
+        }
+
+        // Действие: Погладить
+        function petPenguin() {
+            if (stats.isDead || stats.isSleeping) return;
+            triggerBounce();
+            tg.HapticFeedback.impactOccurred('medium'); // Легкая приятная вибрация телефона
+            updateStat('joy', 10);
+        }
+
+        // Возрождение пингвина
+        function revive() {
+            stats = { hunger: 100, joy: 100, energy: 100, isSleeping: false, isDead: false };
+            sleepBtn.classList.remove('active');
+            document.getElementById('sleep-text').innerText = "Уложить спать";
+            document.getElementById('sleep-icon').innerText = "😴";
+            saveGame();
+            render();
+        }
+
+        // Логика изменения настроения пингвина (Эмодзи)
+        function getPenguinEmoji() {
+            if (stats.isDead) return '💀';
+            if (stats.isSleeping) return '💤';
+            if (stats.hunger < 30) return '🤤';
+            if (stats.joy < 30) return '😢';
+            if (stats.energy < 30) return '🥱';
+            if (stats.joy > 80 && stats.hunger > 80) return '🥳';
+            return '🐧';
+        }
+
+        // Функция обновления интерфейса (Отрисовка полосочек)
+        function render() {
+            // Эмодзи
+            penguinEl.innerText = getPenguinEmoji();
+
+            // Текстовые проценты
+            document.getElementById('txt-hunger').innerText = stats.hunger + '%';
+            document.getElementById('txt-joy').innerText = stats.joy + '%';
+            document.getElementById('txt-energy').innerText = stats.energy + '%';
+
+            // Ширина полосок
+            document.getElementById('bar-hunger').style.width = stats.hunger + '%';
+            document.getElementById('bar-joy').style.width = stats.joy + '%';
+            document.getElementById('bar-energy').style.width = stats.energy + '%';
+
+            // Цвета полосок в зависимости от критичности
+            setColor('bar-hunger', stats.hunger);
+            setColor('bar-joy', stats.joy);
+            setColor('bar-energy', stats.energy);
+
+            // Если умер — меняем кнопки на кнопку возрождения
+            const controls = document.getElementById('controls');
+            if (stats.isDead) {
+                controls.innerHTML = `<button onclick="revive()" style="grid-column: span 2; background-color: #e74c3c; color: white;"><span class="btn-icon">✨</span> Возродить пингвина</button>`;
+            } else if (controls.children.length === 1) {
+                // Восстанавливаем обычные кнопки, если воскресили
+                location.reload();
+            }
+        }
+
+        function setColor(id, value) {
+            const el = document.getElementById(id);
+            if (value < 30) el.style.backgroundColor = '#e74c3c'; // Красный
+            else if (value < 60) el.style.backgroundColor = '#f39c12'; // Оранжевый
+            else el.style.backgroundColor = id === 'bar-hunger' ? '#2ecc71' : id === 'bar-joy' ? '#9b59b6' : '#f1c40f';
+        }
+
+        // ТИКАНИЕ ВРЕМЕНИ (каждые 4 секунды уменьшаются параметры)
+        setInterval(() => {
+            if (stats.isDead) return;
+
+            if (stats.isSleeping) {
+                updateStat('energy', 5);    // Сон восстанавливает энергию
+                updateStat('hunger', -1);   // Во сне голод идет медленнее
+                updateStat('joy', -1);
+            } else {
+                updateStat('hunger', -2);   // Обычный голод
+                updateStat('joy', -2);     // Обычная грусть
+                updateStat('energy', -1);   // Обычная усталость
+            }
+        }, 4000); 
+
+        // Первая отрисовка при запуске
+        render();
+    </script>
 </body>
 </html>
+
